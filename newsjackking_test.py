@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1d-bjWvRVVCpt_ek3qkqd5BONNyr2cWp8
 """
 
-!pip install feedparser requests beautifulsoup4 pandas
+
 
 import json
 import logging
