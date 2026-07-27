@@ -32,4 +32,4 @@ jobs:
         with:
           name: daily-intelligence-report
           path: reports/*.md
-          retention-days: 30
+          retention-days: 90
