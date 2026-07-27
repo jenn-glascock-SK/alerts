@@ -6,7 +6,9 @@ from datetime import datetime
 import feedparser
 import requests
 
+# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 class RegulatoryIngestionEngine:
     def __init__(self, bls_api_key: str = None):
@@ -73,7 +75,7 @@ class RegulatoryIngestionEngine:
         logging.info("Fetching BLS labor series metrics...")
         url = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
         headers = {"Content-Type": "application/json"}
-        # Example series ID: Average Hourly Earnings for Nursing Facilities (CES6562311003)
+        # Series ID: Average Hourly Earnings for Nursing Facilities (CES6562311003)
         payload = json.dumps({
             "seriesid": ["CES6562311003"],
             "startyear": "2025",
@@ -134,7 +136,7 @@ def generate_executive_digest(signals):
 
 
 def send_to_slack(digest_md, webhook_url):
-    """Pushes digest directly to Slack if a webhook is configured."""
+    """Pushes digest directly to Slack if a webhook URL is present."""
     if not webhook_url:
         return
     payload = {"text": digest_md}
@@ -153,12 +155,22 @@ if __name__ == "__main__":
     # 2. Format into Executive Digest
     digest_output = generate_executive_digest(signals)
 
-    # 3. Print directly to GitHub Actions console log
+    # 3. Print directly to standard output (GitHub Actions log)
     print("\n" + "="*50)
     print(digest_output)
     print("="*50 + "\n")
 
-    # 4. Push to Slack if SLACK_WEBHOOK_URL environment variable is set
+    # 4. Save digest to Markdown file inside reports/ folder for GitHub Artifacts
+    os.makedirs("reports", exist_ok=True)
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    report_filename = f"reports/Executive_Digest_{today_str}.md"
+
+    with open(report_filename, "w", encoding="utf-8") as f:
+        f.write(digest_output)
+
+    logging.info(f"✅ Saved report to {report_filename}")
+
+    # 5. Push to Slack if SLACK_WEBHOOK_URL environment variable is set
     slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
     if slack_webhook:
         send_to_slack(digest_output, slack_webhook)
