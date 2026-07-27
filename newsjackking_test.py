@@ -22,10 +22,11 @@ class RegulatoryIngestionEngine:
             "title": title,
             "url": url,
             "published_at": date,
-            "content": raw_content[:500],
+            "content": raw_content[:500],  # Truncated sample
             "ingested_at": datetime.utcnow().isoformat()
         })
 
+    # A. CMS via Federal Register API
     def fetch_cms_updates(self):
         logging.info("Fetching CMS Federal Register updates...")
         url = (
@@ -47,12 +48,12 @@ class RegulatoryIngestionEngine:
         except Exception as e:
             logging.error(f"Error fetching CMS updates: {e}")
 
+    # B. Healthcare Dive & Becker's via RSS
     def fetch_rss_feeds(self):
         logging.info("Fetching RSS industry news feeds...")
         rss_urls = {
             "Healthcare Dive": "https://www.healthcaredive.com/feeds/news/",
-            "HHS OIG News": "https://oig.hhs.gov/rss/newsroom.xml",
-            "NIC MAP Vision News": "https://www.nic.org/feed/"  # Added NIC feed target
+            "HHS OIG News": "https://oig.hhs.gov/rss/newsroom.xml"
         }
         for source_name, feed_url in rss_urls.items():
             try:
@@ -69,10 +70,12 @@ class RegulatoryIngestionEngine:
             except Exception as e:
                 logging.error(f"Error fetching RSS for {source_name}: {e}")
 
+    # C. BLS Wage & Labor Data via Public API
     def fetch_bls_labor_data(self):
         logging.info("Fetching BLS labor series metrics...")
         url = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
         headers = {"Content-Type": "application/json"}
+        # Series ID: Average Hourly Earnings for Nursing Facilities (CES6562311003)
         payload = json.dumps({
             "seriesid": ["CES6562311003"],
             "startyear": "2025",
@@ -84,7 +87,7 @@ class RegulatoryIngestionEngine:
             if res.get("status") == "REQUEST_SUCCEEDED":
                 for series in res["Results"]["series"]:
                     s_id = series["seriesID"]
-                    for data in series["data"][:1]:
+                    for data in series["data"][:1]:  # Latest data point
                         self._add_signal(
                             source="Bureau of Labor Statistics",
                             category="Labor Market",
@@ -103,73 +106,61 @@ class RegulatoryIngestionEngine:
         return self.normalized_signals
 
 
-def synthesize_digest_with_ai(signals, openai_api_key):
+def generate_executive_digest(signals):
     """
-    Uses OpenAI to analyze raw signals and generate an Executive Intelligence Signal.
+    Transforms ingested signals into a formatted Executive Digest.
     """
-    if not openai_api_key:
-        logging.warning("No OPENAI_API_KEY provided. Falling back to simple formatting.")
-        return fallback_generate_digest(signals)
-
-    prompt = f"""
-You are a senior healthcare analyst. Synthesize the following raw market signals into a concise Executive Intelligence Signal digest.
-
-Raw Signals Data:
-{json.dumps(signals, indent=2)}
-
-Format the output EXACTLY like this template:
-
-📢 Executive Intelligence Signal
-* **Metric/Update:** [Key occupancy/market metric, e.g., NIC MAP Vision metrics]
-* **Regulatory Context:** [Summary of primary CMS or regulatory update]
-* **Labor Signal:** [Key BLS labor metric or wage trend]
-* **Compliance Alert:** [HHS-OIG or compliance flag]
-* **Action Item:** [1 strategic recommendation based on these combined signals]
-"""
-
-    headers = {
-        "Authorization": f"Bearer {openai_api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2
-    }
-
-    try:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=20)
-        res_json = response.json()
-        return res_json["choices"][0]["message"]["content"]
-    except Exception as e:
-        logging.error(f"AI synthesis failed: {e}")
-        return fallback_generate_digest(signals)
-
-
-def fallback_generate_digest(signals):
     if not signals:
         return "No new intelligence signals retrieved."
-    digest_md = "## 📢 Executive Intelligence Signal Digest\n\n"
-    for sig in signals[:5]:
-        digest_md += f"* **[{sig['title']}]({sig['url']})** ({sig['source']})\n"
+
+    # Group signals by category
+    categorized = {}
+    for sig in signals:
+        cat = sig.get("category", "General Updates")
+        categorized.setdefault(cat, []).append(sig)
+
+    # Build Markdown string
+    digest_md = "## 📢 Executive Intelligence Signal Digest\n"
+    digest_md += f"*Generated on: {signals[0].get('ingested_at', 'N/A')[:10]}*\n\n---\n\n"
+
+    for category, items in categorized.items():
+        digest_md += f"### 📌 {category}\n"
+        for item in items[:3]:  # Top 3 items per category
+            digest_md += f"* **[{item['title']}]({item['url']})**\n"
+            digest_md += f"  > *Source: {item['source']} | Date: {item['published_at'][:10]}*\n"
+            if item.get("content"):
+                digest_md += f"  > {item['content'][:150]}...\n"
+            digest_md += "\n"
+
     return digest_md
 
 
+def send_to_slack(digest_md, webhook_url):
+    """Pushes digest directly to Slack if a webhook URL is present."""
+    if not webhook_url:
+        return
+    payload = {"text": digest_md}
+    response = requests.post(webhook_url, json=payload)
+    if response.status_code == 200:
+        logging.info("✅ Alert successfully sent to Slack!")
+    else:
+        logging.error(f"❌ Failed to send to Slack: {response.status_code}")
+
+
 if __name__ == "__main__":
+    # 1. Instantiate and run Ingestion Engine
     engine = RegulatoryIngestionEngine()
     signals = engine.run_all()
 
-    # Get OpenAI API Key from environment variable
-    openai_key = os.getenv("OPENAI_API_KEY")
+    # 2. Format into Executive Digest
+    digest_output = generate_executive_digest(signals)
 
-    # Synthesize with AI layer
-    digest_output = synthesize_digest_with_ai(signals, openai_key)
-
+    # 3. Print directly to standard output (GitHub Actions log)
     print("\n" + "="*50)
     print(digest_output)
     print("="*50 + "\n")
 
-    # Save report
+    # 4. Save digest to Markdown file inside reports/ folder for GitHub Artifacts
     os.makedirs("reports", exist_ok=True)
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     report_filename = f"reports/Executive_Digest_{today_str}.md"
@@ -177,4 +168,9 @@ if __name__ == "__main__":
     with open(report_filename, "w", encoding="utf-8") as f:
         f.write(digest_output)
 
-    logging.info(f"✅ Saved synthesized report to {report_filename}")
+    logging.info(f"✅ Saved report to {report_filename}")
+
+    # 5. Push to Slack if SLACK_WEBHOOK_URL environment variable is set
+    slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
+    if slack_webhook:
+        send_to_slack(digest_output, slack_webhook)
