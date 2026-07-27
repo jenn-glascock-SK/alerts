@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs every day at 12:00 UTC (8:00 AM EDT)
     - cron: '0 12 * * *'
-  workflow_dispatch: # Enables a manual "Run workflow" button in GitHub
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   run-scraper:
@@ -22,7 +22,14 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests feedparser beautifulsoup4 pandas
 
       - name: Execute Monitoring Script
         run: python newsjackking_test.py
+
+      - name: Upload Daily Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-intelligence-report
+          path: reports/*.md
+          retention-days: 30
