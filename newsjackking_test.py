@@ -207,7 +207,6 @@ def save_digest_to_drive(digest_md):
 save_digest_to_drive(digest)
 
 # 1. Install dependencies
-!pip install feedparser requests beautifulsoup4 pandas -q
 
 # 2. Instantiate and run Ingestion Engine (Step 1)
 engine = RegulatoryIngestionEngine()
