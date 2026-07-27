@@ -118,7 +118,7 @@ if __name__ == "__main__":
     print(json.dumps(signals, indent=2))
 
 import requests
-from IPython.display import display, Markdown
+
 
 def generate_executive_digest(signals):
     """
@@ -151,8 +151,8 @@ def generate_executive_digest(signals):
 # ----------------------------------------------------------------
 # Option A: Display inside Colab Notebook
 # ----------------------------------------------------------------
-def display_in_colab(digest_md):
-    display(Markdown(digest_md))
+def display_digest(digest_md):
+    print(digest_md)
 
 # ----------------------------------------------------------------
 # Option B: Push directly to Slack via Webhook (Optional)
@@ -174,7 +174,8 @@ def send_to_slack(digest_md, webhook_url):
 digest = generate_executive_digest(signals)
 
 # 1. Render in Colab
-display_in_colab(digest)
+def display_digest(digest_md):
+    print(digest_md)
 
 # 2. (Optional) Uncomment to send to Slack:
 # SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
@@ -214,4 +215,5 @@ raw_signals = engine.run_all()
 
 # 3. Format and render Executive Digest (Step 3)
 digest_output = generate_executive_digest(raw_signals)
-display_in_colab(digest_output)
+def display_digest(digest_md):
+    print(digest_md)
